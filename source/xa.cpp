@@ -44,7 +44,7 @@ namespace oxs::xa
          } //
       } //
 
-      auto encode( const XID& xid) -> std::string
+      auto encode( const XID& value) -> std::string
       {
          auto transform = []( auto bytes)
          {
@@ -54,7 +54,7 @@ namespace oxs::xa
                | std::ranges::to< std::string>();
          };
 
-         return std::format( "oxs:{}:{}:{}", xid.formatID, transform( local::gtrid( xid)), transform( local::bqual( xid)));
+         return std::format( "oxs:{}:{}:{}", value.formatID, transform( local::gtrid( value)), transform( local::bqual( value)));
       }
 
       auto encode( const XID* const xid) -> std::string
@@ -63,9 +63,9 @@ namespace oxs::xa
          return encode( *xid);
       }
 
-      auto decode( const std::string_view gid) -> XID
+      auto decode( const std::string_view value) -> XID
       {
-         const auto parts = gid 
+         const auto parts = value 
             | std::views::split(':') 
             | std::views::transform( []( auto part) { return std::string_view{ part.data(), part.size()}; }) 
             | std::ranges::to< std::vector>();
@@ -79,14 +79,14 @@ namespace oxs::xa
          if( gtrid.size() % 2 || bqual.size() % 2)
             return {};
          
-         XID xid
+         XID result
          { 
             .formatID = local::format( parts[ 1]), 
-            .gtrid_length = static_cast< decltype(xid.gtrid_length)>(gtrid.size() / 2), 
-            .bqual_length = static_cast< decltype(xid.bqual_length)>(bqual.size() / 2),
+            .gtrid_length = static_cast< decltype(result.gtrid_length)>(gtrid.size() / 2), 
+            .bqual_length = static_cast< decltype(result.bqual_length)>(bqual.size() / 2),
          };
 
-         if( xid.gtrid_length + xid.bqual_length > XIDDATASIZE)
+         if( result.gtrid_length + result.bqual_length > XIDDATASIZE)
             return {};
          
          auto transform = []( auto hex, auto out)
@@ -105,10 +105,10 @@ namespace oxs::xa
             return true;
          };
 
-         if( ! transform( gtrid, local::gtrid( xid)) || ! transform( bqual, local::bqual( xid)))
+         if( ! transform( gtrid, local::gtrid( result)) || ! transform( bqual, local::bqual( result)))
             return {};
 
-         return xid;
+         return result;
       }
 
    } // xid

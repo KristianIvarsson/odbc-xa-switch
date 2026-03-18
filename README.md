@@ -12,7 +12,9 @@ Minimal open-source ODBC XA switch foundation primarily for XATMI.
   - Requirements
     - Microsoft ODBC Driver for SQL Server (`msodbcsql`) 17.3+ installed on target host
   - Deviations
-    - None known
+    - xa_recover (probably) don't list transactions that still have an existing connection
+  - Note
+    - XA distributed transactions usually require MSDTC to be enabled
 
 - PostgreSQL
   - Name

@@ -43,47 +43,27 @@ namespace oxs::pgsql
       auto close( char*, const int rmid, const long)
       {
          if( context::has( rmid))
-         {
-            auto [ henv, hdbc] = context::pop( rmid);
-
-            if( odbc::failure( SQLDisconnect( hdbc)))
-               [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
-         }
+            context::pop( rmid);
 
          return XA_OK;
       }
 
       auto open( char* xa_info, const int rmid, const long)
       {
+         assert( xa_info != nullptr);
+
          if( context::has( rmid))
             close( nullptr, rmid, TMNOFLAGS);
 
-         assert(xa_info != nullptr);
+         auto context = odbc::context::create( xa_info);
 
-         if( xa_info == nullptr)
-            [[unlikely]] return XAER_INVAL;
+         if( ! context)
+            [[unlikely]] return XAER_RMFAIL;
             
-         odbc::henv henv{ SQL_NULL_HANDLE};
-         
-         if( odbc::failure( SQLSetEnvAttr( henv, SQL_ATTR_ODBC_VERSION, reinterpret_cast< SQLPOINTER>( SQL_OV_ODBC3), 0))) 
-            [[unlikely]] return odbc::logging( henv), XAER_RMERR;
+         if( odbc::failure( SQLSetConnectAttr( std::get< odbc::hdbc>( *context), SQL_ATTR_AUTOCOMMIT, reinterpret_cast< SQLPOINTER>( SQL_AUTOCOMMIT_ON), 0))) 
+            [[unlikely]] return odbc::logging( std::get< odbc::hdbc>( *context)), XAER_RMERR;
 
-         odbc::hdbc hdbc{ henv};
-
-         if( odbc::failure( SQLDriverConnect( hdbc, NULL, reinterpret_cast< SQLCHAR*>( xa_info), SQL_NTS, NULL, 0, NULL, SQL_DRIVER_NOPROMPT))) 
-            [[unlikely]] return odbc::logging( hdbc), XAER_RMFAIL;
-
-         if( odbc::failure( SQLSetConnectAttr( hdbc, SQL_ATTR_AUTOCOMMIT, reinterpret_cast< SQLPOINTER>( SQL_AUTOCOMMIT_ON), 0))) 
-         {
-            odbc::logging( hdbc);
-
-            if( odbc::failure( SQLDisconnect( hdbc)))
-               odbc::logging( hdbc);
-
-            return XAER_RMERR;
-         }
-
-         if( ! context::add( rmid, { std::move( henv), std::move( hdbc)}))
+         if( ! context::add( rmid, std::move( *context)))
             [[unlikely]] return XAER_INVAL;
 
          return XA_OK;
@@ -106,24 +86,6 @@ namespace oxs::pgsql
             
          // only prepared transactions can be used through different connections
          return detail::execute( rmid, std::format( "PREPARE TRANSACTION '{}'", xa::xid::encode( xid)));
-      }
-
-      auto rollback( XID* const xid, const int rmid, const long flags)
-      {
-         // since there's always a prepared transaction, this must happen regardless of TMONEPHASE
-         return detail::execute( rmid, std::format( "ROLLBACK PREPARED '{}'", xa::xid::encode( xid)));
-      }
-
-      auto prepare( XID* const xid, const int rmid, const long flags)
-      {
-         // since there's always a prepared transaction, nothing to do here
-         return XA_OK;
-      }
-
-      auto commit( XID* const xid, const int rmid, const long flags)
-      {
-         // since there's always a prepared transaction, this must happen regardless of TMONEPHASE
-         return detail::execute( rmid, std::format( "COMMIT PREPARED '{}'", xa::xid::encode( xid)));
       }
 
       auto recover( XID* const xids, const long count, const int rmid, const long flags) -> int
@@ -185,10 +147,25 @@ namespace oxs::pgsql
          if( flags & TMENDRSCAN)
             prepared.erase( rmid);
 
-         if( std::any_of( xids, xids + range.size(), []( const XID& xid) { return xa::xid::null( xid); }))
-            [[unlikely]] return XAER_RMFAIL;
-
          return static_cast< int>( range.size());
+      }
+
+      auto rollback( XID* const xid, const int rmid, const long flags)
+      {
+         // since there's always a prepared transaction, this must happen regardless of TMONEPHASE
+         return detail::execute( rmid, std::format( "ROLLBACK PREPARED '{}'", xa::xid::encode( xid)));
+      }
+
+      auto prepare( XID* const xid, const int rmid, const long flags)
+      {
+         // since there's always a prepared transaction, nothing to do here
+         return XA_OK;
+      }
+
+      auto commit( XID* const xid, const int rmid, const long flags)
+      {
+         // since there's always a prepared transaction, this must happen regardless of TMONEPHASE
+         return detail::execute( rmid, std::format( "COMMIT PREPARED '{}'", xa::xid::encode( xid)));
       }
 
       auto forget( XID* const xid, const int rmid, const long flags)

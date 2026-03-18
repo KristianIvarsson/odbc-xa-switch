@@ -6,6 +6,8 @@
 
 #include "odbc.hpp"
 
+#include <sqlext.h>
+
 #include <unistd.h>
 
 #include <print>
@@ -26,5 +28,32 @@ namespace oxs::odbc
             std::println( stderr, "[{}] {} [{}]", getpid(), reinterpret_cast< const char*>( message), reinterpret_cast< const char*>( state));
       }
    } // detail
+
+   henv::~henv() = default;
+
+   hdbc::~hdbc()
+   {
+      if( *this)
+         if( failure( SQLDisconnect( *this)))
+            logging( *this);
+   }
+
+   namespace context
+   {
+      auto create( std::string_view string) -> std::optional< std::tuple< henv, hdbc>>
+      {
+         henv env{ SQL_NULL_HANDLE};
+
+         if( failure( SQLSetEnvAttr( env, SQL_ATTR_ODBC_VERSION, reinterpret_cast< SQLPOINTER>( SQL_OV_ODBC3), 0))) 
+            [[unlikely]] return logging( env), std::nullopt;
+
+         hdbc dbc{ env};
+
+         if( failure( SQLDriverConnect( dbc, NULL, reinterpret_cast< SQLCHAR*>( const_cast< char*>( string.data())), SQL_NTS, NULL, 0, NULL, SQL_DRIVER_NOPROMPT))) 
+            [[unlikely]] return logging( dbc), std::nullopt;
+
+         return std::make_tuple( std::move( env), std::move( dbc));
+      }
+   } // context
 
 } // oxs::odbc

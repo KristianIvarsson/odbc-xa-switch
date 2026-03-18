@@ -34,7 +34,6 @@ namespace oxs::mssql
 
       struct XACALLPARAM
       {
-         // ms have their own XID struct with different layout
          struct XID
          {
             int formatID;
@@ -52,12 +51,24 @@ namespace oxs::mssql
          unsigned int sizeReturned;
       };
 
+      namespace normal
+      {
+         using XID = XID;
+      } // normal
+
+      namespace native
+      {
+         using XID = XACALLPARAM::XID;
+      } // native
+
+      static_assert( sizeof( normal::XID::data) == sizeof( native::XID::data));
+
       namespace transform
       {
          namespace detail
          {
-            template<typename target>
-            auto xid( const auto& value)
+            template<typename target, typename source>
+            auto xid( const source& value)
             {
                target result
                {
@@ -66,23 +77,21 @@ namespace oxs::mssql
                   .bqual_length = static_cast< decltype( result.bqual_length)>( value.bqual_length),
                };
 
-               static_assert( sizeof( value.data) == sizeof( result.data));
                std::copy_n( value.data, XIDDATASIZE, result.data);
 
                return result;
             }
          }
 
-         auto xid( const XID& value) { return detail::xid< XACALLPARAM::XID>( value); }
-         auto xid( const XACALLPARAM::XID& value) { return detail::xid< XID>( value); }
+         auto xid( const normal::XID& value) { return detail::xid< native::XID>( value); }
+         auto xid( const native::XID& value) { return detail::xid< normal::XID>( value); }
       } // transform
-
 
       namespace detail
       {
          auto call( const int rmid, const XID* const xid, const int operation, const long flags)
          {
-            assert(xid != nullptr);
+            assert( xid != nullptr);
             
             XACALLPARAM param
             {
@@ -92,7 +101,7 @@ namespace oxs::mssql
             };
 
             if( odbc::failure( SQLSetConnectAttr( context::dbc( rmid), SQL_ATTR_ENLIST_IN_XA, &param, SQL_IS_POINTER)))
-               return odbc::logging< SQL_HANDLE_DBC>( context::dbc( rmid)), XAER_RMERR;
+               return odbc::logging( context::dbc( rmid)), XAER_RMERR;
 
             return param.status;
          }
@@ -104,10 +113,7 @@ namespace oxs::mssql
          {
             auto [ henv, hdbc] = context::pop( rmid);
 
-            if( odbc::failure( SQLEndTran( SQL_HANDLE_DBC, hdbc, SQL_ROLLBACK)))
-               [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
-
-            if( odbc::failure( SQLDisconnect( hdbc)))
+            if( odbc::failure( SQLSetConnectAttr( hdbc, SQL_ATTR_AUTOCOMMIT, reinterpret_cast< SQLPOINTER>( SQL_AUTOCOMMIT_ON), 0))) 
                [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
          }
 
@@ -116,32 +122,22 @@ namespace oxs::mssql
 
       auto open( char* xa_info, const int rmid, const long)
       {
+         assert( xa_info != nullptr);
+
          if( oxs::context::has( rmid))
             close( nullptr, rmid, TMNOFLAGS);
 
-         assert(xa_info != nullptr);
+         auto context = odbc::context::create( xa_info);
 
-         odbc::henv henv{ SQL_NULL_HANDLE};
-         
-         if( odbc::failure( SQLSetEnvAttr( henv, SQL_ATTR_ODBC_VERSION, reinterpret_cast< SQLPOINTER>( SQL_OV_ODBC3), 0))) 
-            [[unlikely]] return odbc::logging( henv), XAER_RMERR;
+         if( ! context)
+            [[unlikely]] return XAER_RMFAIL;
 
-         odbc::hdbc hdbc{ henv};
-
-         if( odbc::failure( SQLDriverConnect( hdbc, NULL, reinterpret_cast< SQLCHAR*>( xa_info), SQL_NTS, NULL, 0, NULL, SQL_DRIVER_NOPROMPT))) 
-            [[unlikely]] return odbc::logging( hdbc), XAER_RMFAIL;
+         const auto& hdbc = std::get< odbc::hdbc>( *context);
 
          if( odbc::failure( SQLSetConnectAttr( hdbc, SQL_ATTR_AUTOCOMMIT, reinterpret_cast< SQLPOINTER>( SQL_AUTOCOMMIT_OFF), 0))) 
-         {
-            odbc::logging( hdbc);
+            [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
 
-            if( odbc::failure( SQLDisconnect( hdbc)))
-               odbc::logging( hdbc);
-
-            return XAER_RMERR;
-         }
-
-         if( ! context::add( rmid, { std::move( henv), std::move( hdbc)}))
+         if( ! context::add( rmid, std::move( *context)))
             [[unlikely]] return XAER_INVAL;
 
          return XA_OK;
@@ -157,6 +153,45 @@ namespace oxs::mssql
          return detail::call( rmid, xid, OP_END, flags);
       }
 
+      auto recover( XID* const xids, const long count, const int rmid, const long flags) -> int
+      {
+         if( count < 0)
+            [[unlikely]] return XAER_INVAL;
+
+         if( count > 0 && xids == nullptr)
+            [[unlikely]] return XAER_INVAL;
+
+         const auto capacity = static_cast< std::size_t>( count) * sizeof( XACALLPARAM::XID);
+
+         std::vector< std::byte> payload( sizeof( XACALLPARAM) + capacity);
+
+         XACALLPARAM param
+         {
+            .sizeParam = static_cast< decltype( param.sizeParam)>( payload.size()),
+            .operation = OP_RECOVER,
+            .flags = static_cast< decltype( param.flags)>( flags),
+            .sizeData = static_cast< decltype( param.sizeData)>( capacity),
+         };
+
+         std::ranges::copy( std::as_bytes( std::span{ &param, 1}), payload.begin());
+
+         if( odbc::failure( SQLSetConnectAttr( context::dbc( rmid), SQL_ATTR_ENLIST_IN_XA, payload.data(), SQL_IS_POINTER)))
+            [[unlikely]] return odbc::logging( context::dbc( rmid)), XAER_RMERR;
+
+         std::ranges::copy( std::span{ payload}.first( sizeof( param)), std::as_writable_bytes( std::span{ &param, 1}).begin());
+
+         if( param.status < XA_OK)
+            [[unlikely]] return param.status;
+
+
+         std::span data{ std::span{ payload}.subspan( sizeof( XACALLPARAM), param.sizeReturned)};
+         std::vector< XACALLPARAM::XID> prepared( param.sizeReturned / sizeof( XACALLPARAM::XID));
+         std::ranges::copy( data, std::as_writable_bytes( std::span{ prepared}).begin());
+         std::ranges::transform( prepared, xids, []( const native::XID &value) { return transform::xid( value); });
+
+         return static_cast< int>( prepared.size());
+      }
+
       auto rollback( XID* const xid, const int rmid, const long flags)
       {
          return detail::call( rmid, xid, OP_ROLLBACK, flags);
@@ -170,43 +205,6 @@ namespace oxs::mssql
       auto commit( XID* const xid, const int rmid, const long flags)
       {
          return detail::call( rmid, xid, OP_COMMIT, flags);
-      }
-
-      auto recover( XID* const xids, const long count, const int rmid, const long flags) -> int
-      {
-         if( count < 0)
-            [[unlikely]] return XAER_INVAL;
-
-         if( count > 0 && xids == nullptr)
-            [[unlikely]] return XAER_INVAL;
-
-         const auto capacity = static_cast< std::size_t>( count) * sizeof( XACALLPARAM::XID);
-         std::vector< std::byte> payload( sizeof( XACALLPARAM) + capacity);
-         auto& param = *reinterpret_cast< XACALLPARAM*>( payload.data());
-
-         param.sizeParam = payload.size();
-         param.operation = OP_RECOVER;
-         param.flags = flags;
-         param.sizeData = capacity;
-
-         if( odbc::failure( SQLSetConnectAttr( context::dbc( rmid), SQL_ATTR_ENLIST_IN_XA, payload.data(), SQL_IS_POINTER)))
-            [[unlikely]] return odbc::logging< SQL_HANDLE_DBC>( context::dbc( rmid)), XAER_RMERR;
-
-         if( param.status < XA_OK)
-            [[unlikely]] return param.status;
-
-         const auto returned = param.sizeReturned;
-
-         if( returned > capacity || returned % sizeof( XACALLPARAM::XID) != 0)
-            [[unlikely]] return XAER_RMERR;
-
-         const std::span< const XACALLPARAM::XID> prepared{ 
-            reinterpret_cast< const XACALLPARAM::XID*>( payload.data() + sizeof( XACALLPARAM)), 
-            returned / sizeof( XACALLPARAM::XID)};
-
-         std::ranges::transform( prepared, xids, [](const XACALLPARAM::XID &value) { return transform::xid(value); });
-
-         return prepared.size();
       }
 
       auto forget( XID* const xid, const int rmid, const long flags)
