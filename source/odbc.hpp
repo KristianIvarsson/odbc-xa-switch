@@ -47,6 +47,11 @@ namespace oxs::odbc
             return m_handle;
          }
 
+         operator SQLSMALLINT() const noexcept
+         {
+            return type;
+         }
+
          explicit operator bool() const noexcept
          {
             return m_handle != SQL_NULL_HANDLE;
@@ -90,7 +95,7 @@ namespace oxs::odbc
 
    namespace detail
    {
-      void logging( SQLSMALLINT type, SQLHANDLE handle);
+      auto logging( SQLSMALLINT type, SQLHANDLE handle) -> SQLINTEGER;
    } // detail
 
    template< SQLSMALLINT type>

@@ -10,12 +10,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(ODBC REQUIRED)
 
 add_library(odbcxaswitch SHARED
-    source/context.cpp
-    source/mssql.cpp
-    source/pgsql.cpp
-    source/oradb.cpp
-    source/odbc.cpp
     source/xa.cpp
+    source/odbc.cpp
+    source/context.cpp
+    source/rm/mssql.cpp
+    source/rm/oradb.cpp
+    source/rm/pgsql.cpp
 )
 
 target_include_directories(odbcxaswitch

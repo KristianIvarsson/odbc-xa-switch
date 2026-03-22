@@ -4,7 +4,7 @@
 // Licensed under the MIT License. See https://opensource.org/licenses/MIT for details.
 //
 
-#include "odbc-xa-switch/oradb.h"
+#include "odbc-xa-switch/rm/oradb.h"
 
 #include "xa.hpp"
 #include "odbc.hpp"
@@ -56,11 +56,24 @@ namespace oxs::oradb
                .bqual_length = static_cast< decltype( result.bqual_length)>( value.bqual_length),
             };
 
-            std::copy_n( value.data, value.gtrid_length, result.gtrid);
-            std::copy_n( value.data + value.gtrid_length, value.bqual_length, result.bqual);
+            std::ranges::copy( xa::xid::make::gtrid( value), result.gtrid);
+            std::ranges::copy( xa::xid::make::bqual( value), result.bqual);
 
             return result;
          }
+
+         namespace make
+         {
+            auto gtrid( const native::XID& xid)
+            {
+               return std::span{ xid.gtrid, static_cast< std::size_t>( xid.gtrid_length)};
+            }
+
+            auto bqual( const native::XID& xid)
+            {
+               return std::span{ xid.bqual, static_cast< std::size_t>( xid.bqual_length)};
+            }
+         } // make
 
          auto xid( const native::XID& value)
          {
@@ -71,8 +84,8 @@ namespace oxs::oradb
                .bqual_length = static_cast< decltype( result.bqual_length)>( value.bqual_length),
             };
             
-            std::copy_n( value.gtrid, value.gtrid_length, result.data);
-            std::copy_n( value.bqual, value.bqual_length, result.data + value.gtrid_length);
+            std::ranges::copy( make::gtrid( value), xa::xid::make::gtrid( result).begin());
+            std::ranges::copy( make::bqual( value), xa::xid::make::bqual( result).begin());
 
             return result;
          }
@@ -80,8 +93,6 @@ namespace oxs::oradb
 
       namespace detail
       {
-         constexpr SQLULEN max_id_size = 64;
-
          namespace bind
          {
             namespace output
@@ -105,19 +116,32 @@ namespace oxs::oradb
                   return XA_OK;
                }
 
+               template< std::size_t size>
+               auto parameter( const odbc::hstmt& hstmt, SQLUSMALLINT& number, const std::span< const std::byte> value) -> int
+               {
+                  if( value.size() > size)
+                     [[unlikely]] return XAER_INVAL;
+
+                  SQLLEN length = value.size();
+                  if( odbc::failure( SQLBindParameter( hstmt, ++number, SQL_PARAM_INPUT, SQL_C_BINARY, SQL_VARBINARY, size, 0, const_cast< std::byte*>( value.data()), size, &length)))
+                     [[unlikely]] return odbc::logging( hstmt), XAER_RMERR;
+
+                  return XA_OK;
+               }
+
                auto parameter( const odbc::hstmt& hstmt, SQLUSMALLINT& number, const native::XID& value) -> int
                {
                   if( value.gtrid_length > std::ssize( value.gtrid) || value.bqual_length > std::ssize( value.bqual))
                      [[unlikely]] return XAER_INVAL;
 
                   if( auto xaer = parameter( hstmt, number, value.formatID))
-                     return xaer;
+                     [[unlikely]] return xaer;
                   
-                  if( odbc::failure( SQLBindParameter( hstmt, ++number, SQL_PARAM_INPUT, SQL_C_BINARY, SQL_VARBINARY, sizeof( value.gtrid), 0, const_cast< char*>( value.gtrid), sizeof( value.gtrid), const_cast< SQLLEN*>(&value.gtrid_length))))
-                     [[unlikely]] return odbc::logging( hstmt), XAER_RMERR;
-
-                  if( odbc::failure( SQLBindParameter( hstmt, ++number, SQL_PARAM_INPUT, SQL_C_BINARY, SQL_VARBINARY, sizeof( value.bqual), 0, const_cast< char*>( value.bqual), sizeof( value.bqual), const_cast< SQLLEN*>(&value.bqual_length))))
-                     [[unlikely]] return odbc::logging( hstmt), XAER_RMERR;
+                  if( auto xaer = parameter< sizeof( value.gtrid)>( hstmt, number, std::as_bytes( std::span{ value.gtrid, static_cast< std::size_t>( value.gtrid_length)})))
+                     [[unlikely]] return xaer;
+                  
+                  if( auto xaer = parameter< sizeof( value.bqual)>( hstmt, number, std::as_bytes( std::span{ value.bqual, static_cast< std::size_t>( value.bqual_length)})))
+                     [[unlikely]] return xaer;
 
                   return XA_OK;
                }
@@ -125,7 +149,7 @@ namespace oxs::oradb
                auto parameter( const odbc::hstmt& hstmt, SQLUSMALLINT& number, auto& first, auto&... other) -> int
                {
                   if( auto xaer = parameter( hstmt, number, first))
-                     return xaer;
+                     [[unlikely]] return xaer;
 
                   if constexpr( sizeof...( other) == 0)
                      return XA_OK;
@@ -177,40 +201,14 @@ namespace oxs::oradb
 
       } // detail
 
-      auto close( char*, const int rmid, const long)
-      {
-         if( oxs::context::has( rmid))
-         {
-            auto [ henv, hdbc] = context::pop( rmid);
-
-            if( odbc::failure( SQLSetConnectAttr( hdbc, SQL_ATTR_AUTOCOMMIT, reinterpret_cast< SQLPOINTER>( SQL_AUTOCOMMIT_ON), 0))) 
-               [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
-         }
-
-         return XA_OK;
-      }
-
       auto open( char* xa_info, const int rmid, const long)
       {
-         assert( xa_info != nullptr);
+         return xa::open( xa_info, rmid);
+      }
 
-         if( context::has( rmid))
-            close( nullptr, rmid, TMNOFLAGS);
-
-         auto context = odbc::context::create( xa_info);
-
-         if( ! context)
-            [[unlikely]] return XAER_RMFAIL;
-
-         const auto& hdbc = std::get< odbc::hdbc>( *context);
-
-         if( odbc::failure( SQLSetConnectAttr( hdbc, SQL_ATTR_AUTOCOMMIT, reinterpret_cast< SQLPOINTER>( SQL_AUTOCOMMIT_OFF), 0))) 
-            [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
-
-         if( ! context::add( rmid, std::move( *context)))
-            [[unlikely]] return XAER_INVAL;
-
-         return XA_OK;
+      auto close( char*, const int rmid, const long)
+      {
+         return xa::close( nullptr, rmid);
       }
 
       auto start( XID* const xid, const int rmid, const long flags)
@@ -240,6 +238,12 @@ namespace oxs::oradb
          {
             odbc::hstmt hstmt{ context::dbc( rmid)};
 
+            constexpr auto sql = "SELECT FORMATID, GLOBALID, BRANCHID FROM DBA_PENDING_TRANSACTIONS";
+
+            if( odbc::failure( SQLExecDirect( hstmt, reinterpret_cast< SQLCHAR*>( const_cast< char*>( sql)), SQL_NTS)))
+               [[unlikely]] return odbc::logging( hstmt), XAER_RMFAIL;
+
+
             native::XID xid;
 
             {
@@ -253,11 +257,6 @@ namespace oxs::oradb
                if( odbc::failure( SQLBindCol( hstmt, ++number, SQL_C_BINARY, xid.bqual, sizeof( xid.bqual), &xid.bqual_length)))
                   [[unlikely]] return odbc::logging( hstmt), XAER_RMERR;
             }
-
-            constexpr auto sql = "SELECT FORMATID, GLOBALID, BRANCHID FROM DBA_PENDING_TRANSACTIONS";
-
-            if( odbc::failure( SQLExecDirect( hstmt, reinterpret_cast< SQLCHAR*>( const_cast< char*>( sql)), SQL_NTS)))
-               [[unlikely]] return odbc::logging( hstmt), XAER_RMFAIL;
 
             decltype( prepared)::mapped_type scans;
 

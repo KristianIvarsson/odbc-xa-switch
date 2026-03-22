@@ -4,7 +4,7 @@
 // Licensed under the MIT License. See https://opensource.org/licenses/MIT for details.
 //
 
-#include "odbc-xa-switch/pgsql.h"
+#include "odbc-xa-switch/rm/pgsql.h"
 
 #include "xa.hpp"
 #include "odbc.hpp"
@@ -38,6 +38,12 @@ namespace oxs::pgsql
             return XA_OK;
          }
 
+         auto execute( const int rmid, const std::string_view sql, const XID* const xid)
+         {
+            assert( xid != nullptr);
+            return execute( rmid, std::format( "{} '{}'", sql, xa::xid::encode( *xid)));
+         }
+
       } // detail
 
       auto close( char*, const int rmid, const long)
@@ -60,9 +66,6 @@ namespace oxs::pgsql
          if( ! context)
             [[unlikely]] return XAER_RMFAIL;
             
-         if( odbc::failure( SQLSetConnectAttr( std::get< odbc::hdbc>( *context), SQL_ATTR_AUTOCOMMIT, reinterpret_cast< SQLPOINTER>( SQL_AUTOCOMMIT_ON), 0))) 
-            [[unlikely]] return odbc::logging( std::get< odbc::hdbc>( *context)), XAER_RMERR;
-
          if( ! context::add( rmid, std::move( *context)))
             [[unlikely]] return XAER_INVAL;
 
@@ -85,7 +88,7 @@ namespace oxs::pgsql
             [[unlikely]] return XAER_INVAL;
             
          // only prepared transactions can be used through different connections
-         return detail::execute( rmid, std::format( "PREPARE TRANSACTION '{}'", xa::xid::encode( xid)));
+         return detail::execute( rmid, "PREPARE TRANSACTION", xid);
       }
 
       auto recover( XID* const xids, const long count, const int rmid, const long flags) -> int
@@ -153,7 +156,7 @@ namespace oxs::pgsql
       auto rollback( XID* const xid, const int rmid, const long flags)
       {
          // since there's always a prepared transaction, this must happen regardless of TMONEPHASE
-         return detail::execute( rmid, std::format( "ROLLBACK PREPARED '{}'", xa::xid::encode( xid)));
+         return detail::execute( rmid, "ROLLBACK PREPARED", xid);
       }
 
       auto prepare( XID* const xid, const int rmid, const long flags)
@@ -165,7 +168,7 @@ namespace oxs::pgsql
       auto commit( XID* const xid, const int rmid, const long flags)
       {
          // since there's always a prepared transaction, this must happen regardless of TMONEPHASE
-         return detail::execute( rmid, std::format( "COMMIT PREPARED '{}'", xa::xid::encode( xid)));
+         return detail::execute( rmid, "COMMIT PREPARED", xid);
       }
 
       auto forget( XID* const xid, const int rmid, const long flags)

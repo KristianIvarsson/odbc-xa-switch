@@ -4,6 +4,7 @@
 // Licensed under the MIT License. See https://opensource.org/licenses/MIT for details.
 //
 
+
 #include "odbc.hpp"
 
 #include <sqlext.h>
@@ -16,16 +17,19 @@ namespace oxs::odbc
 {
    namespace detail
    {
-      void logging( const SQLSMALLINT type, const SQLHANDLE handle)
+      auto logging( const SQLSMALLINT type, const SQLHANDLE handle) -> SQLINTEGER
       {
          SQLCHAR state[ 5 + 1] = {};
+         SQLINTEGER native{};
          SQLCHAR message[ SQL_MAX_MESSAGE_LENGTH + 1] = {};
          SQLSMALLINT length = sizeof( message);
 
-         if( failure( SQLGetDiagRec( type, handle, 1, state, nullptr, message, length, &length)))
+         if( failure( SQLGetDiagRec( type, handle, 1, state, &native, message, length, &length)))
             std::println( stderr, "[{}] unknown diagnostic", getpid());
          else
             std::println( stderr, "[{}] {} [{}]", getpid(), reinterpret_cast< const char*>( message), reinterpret_cast< const char*>( state));
+
+         return native;
       }
    } // detail
 

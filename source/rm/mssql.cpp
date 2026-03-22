@@ -4,7 +4,7 @@
 // Licensed under the MIT License. See https://opensource.org/licenses/MIT for details.
 //
 
-#include "odbc-xa-switch/mssql.h"
+#include "odbc-xa-switch/rm/mssql.h"
 
 #include "xa.hpp"
 #include "odbc.hpp"
@@ -107,40 +107,14 @@ namespace oxs::mssql
          }
       } // detail
 
-      auto close( char*, const int rmid, const long)
-      {
-         if( oxs::context::has( rmid))
-         {
-            auto [ henv, hdbc] = context::pop( rmid);
-
-            if( odbc::failure( SQLSetConnectAttr( hdbc, SQL_ATTR_AUTOCOMMIT, reinterpret_cast< SQLPOINTER>( SQL_AUTOCOMMIT_ON), 0))) 
-               [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
-         }
-
-         return XA_OK;
-      }
-
       auto open( char* xa_info, const int rmid, const long)
       {
-         assert( xa_info != nullptr);
+         return xa::open( xa_info, rmid);
+      }
 
-         if( oxs::context::has( rmid))
-            close( nullptr, rmid, TMNOFLAGS);
-
-         auto context = odbc::context::create( xa_info);
-
-         if( ! context)
-            [[unlikely]] return XAER_RMFAIL;
-
-         const auto& hdbc = std::get< odbc::hdbc>( *context);
-
-         if( odbc::failure( SQLSetConnectAttr( hdbc, SQL_ATTR_AUTOCOMMIT, reinterpret_cast< SQLPOINTER>( SQL_AUTOCOMMIT_OFF), 0))) 
-            [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
-
-         if( ! context::add( rmid, std::move( *context)))
-            [[unlikely]] return XAER_INVAL;
-
-         return XA_OK;
+      auto close( char*, const int rmid, const long)
+      {
+         return xa::close( nullptr, rmid);
       }
 
       auto start( XID* const xid, const int rmid, const long flags)

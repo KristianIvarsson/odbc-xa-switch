@@ -38,6 +38,10 @@ typedef struct
 #define XAER_DUPID    -8
 #define XAER_OUTSIDE  -9
 
+#define XA_RBROLLBACK 100
+#define XA_RBDEADLOCK 102
+#define XA_RBTIMEOUT  106
+
 typedef struct xa_switch_t 
 {
     char name[ 32];
