@@ -16,6 +16,7 @@ add_library(odbcxaswitch SHARED
     source/rm/mssql.cpp
     source/rm/oradb.cpp
     source/rm/pgsql.cpp
+    source/rm/sqlany.cpp
 )
 
 target_include_directories(odbcxaswitch
