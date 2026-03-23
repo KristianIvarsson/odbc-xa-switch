@@ -16,6 +16,14 @@ Minimal open-source ODBC XA switch foundation primarily for XATMI.
   - Note
     - XA distributed transactions usually require MSDTC to be enabled
 
+- MySQL/MariaDB:
+  - Name
+    - `mysql_odbc_xa_switch_t`
+  - Requirements
+    - MariaDB ODBC driver installed on target host (for example `MariaDB Unicode`, package `odbc-mariadb`)
+  - Deviations
+    - Does not know about XA_RDONLY
+
 - PostgreSQL
   - Name
     - `pgsql_odbc_xa_switch_t`
@@ -58,16 +66,19 @@ cmake --build build
 `xa_info` (`OPENINFO`) is passed to `xa_open_entry` and used as an ODBC connection string.
 
 ```text
-DRIVER={ODBC Driver 18 for SQL Server};SERVER=tcp:127.0.0.1,1433;DATABASE=master;UID=sa;PWD=pw;Encrypt=no;TrustServerCertificate=yes;
+DSN=MyDSN;
+```
+```text
+Driver={ODBC Driver 18 for SQL Server};SERVER=tcp:127.0.0.1,1433;DATABASE=master;UID=sa;PWD=pw;Encrypt=no;TrustServerCertificate=yes;
+```
+```text
+Driver={MariaDB Unicode};Server=127.0.0.1;Port=3306;Database=master;UID=sa;PWD=pw;
 ```
 ```text
 Driver={PostgreSQL Unicode};Server=localhost;Port=5432;Database=master;Uid=sa;Pwd=pw!;
 ```
 ```text
-Driver={Oracle 23 ODBC driver};DBQ=localhost:1521/FREEPDB1;UID=user;PWD=pw!;
-```
-```text
-DSN=MyDSN;
+Driver={Oracle 23 ODBC driver};DBQ=localhost:1521/FREEPDB1;UID=sa;PWD=pw!;
 ```
 
 

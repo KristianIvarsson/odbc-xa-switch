@@ -14,6 +14,7 @@ add_library(odbcxaswitch SHARED
     source/odbc.cpp
     source/context.cpp
     source/rm/mssql.cpp
+    source/rm/mysql.cpp
     source/rm/oradb.cpp
     source/rm/pgsql.cpp
 )

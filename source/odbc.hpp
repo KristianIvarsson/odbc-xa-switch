@@ -34,7 +34,7 @@ namespace oxs::odbc
 
          ~handle() 
          { 
-            if( m_handle != SQL_NULL_HANDLE) SQLFreeHandle( type, m_handle);
+            if( *this) SQLFreeHandle( type, m_handle);
          }
 
          handle( const handle&) = delete;
@@ -103,5 +103,18 @@ namespace oxs::odbc
    {
       return detail::logging( type, handle);
    }
+
+   namespace detail
+   {
+      auto native( SQLSMALLINT type, SQLHANDLE handle) -> SQLINTEGER;
+   } // detail
+
+   template< SQLSMALLINT type>
+   auto native( const scoped::handle< type>& handle) -> SQLINTEGER
+   {
+      return detail::native( type, handle);
+   }
+
+
 
 } // oxs::odbc

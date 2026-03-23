@@ -31,6 +31,16 @@ namespace oxs::odbc
 
          return native;
       }
+
+      auto native( const SQLSMALLINT type, const SQLHANDLE handle) -> SQLINTEGER
+      {
+         SQLINTEGER native{};
+
+         if( failure( SQLGetDiagRec( type, handle, 1, NULL, &native, NULL, 0, NULL)))
+            std::println( stderr, "[{}] unknown diagnostic", getpid());
+
+         return native;
+      }
    } // detail
 
    henv::~henv() = default;
