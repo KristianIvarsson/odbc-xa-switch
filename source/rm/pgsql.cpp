@@ -155,19 +155,17 @@ namespace oxs::pgsql
 
       auto rollback( XID* const xid, const int rmid, const long flags)
       {
-         // since there's always a prepared transaction, this must happen regardless of TMONEPHASE
          return detail::execute( rmid, "ROLLBACK PREPARED", xid);
       }
 
       auto prepare( XID* const xid, const int rmid, const long flags)
       {
-         // since there's always a prepared transaction, nothing to do here
+         // there's always a prepared transaction
          return XA_OK;
       }
 
       auto commit( XID* const xid, const int rmid, const long flags)
       {
-         // since there's always a prepared transaction, this must happen regardless of TMONEPHASE
          return detail::execute( rmid, "COMMIT PREPARED", xid);
       }
 
