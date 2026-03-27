@@ -153,25 +153,25 @@ namespace oxs::pgsql
          return static_cast< int>( range.size());
       }
 
-      auto rollback( XID* const xid, const int rmid, const long flags)
+      auto rollback( XID* const xid, const int rmid, const long)
       {
          return detail::execute( rmid, "ROLLBACK PREPARED", xid);
       }
 
-      auto prepare( XID* const xid, const int rmid, const long flags)
+      auto prepare( XID* const, const int, const long)
       {
          // there's always a prepared transaction
          return XA_OK;
       }
 
-      auto commit( XID* const xid, const int rmid, const long flags)
+      auto commit( XID* const xid, const int rmid, const long)
       {
          return detail::execute( rmid, "COMMIT PREPARED", xid);
       }
 
       auto forget( XID* const xid, const int rmid, const long flags)
       {
-         return XA_OK;
+         return rollback( xid, rmid, flags);
       }
 
       auto complete( int*, int*, const int, const long)
@@ -184,7 +184,7 @@ namespace oxs::pgsql
 struct xa_switch_t pgsql_odbc_xa_switch_t = 
 {
     .name = "pgsql_odbc_xa_switch_t",
-    .flags = TMNOFLAGS,
+    .flags = TMNOMIGRATE,
     .version = oxs::xa::version,
     .xa_open_entry = oxs::pgsql::open,
     .xa_close_entry = oxs::pgsql::close,

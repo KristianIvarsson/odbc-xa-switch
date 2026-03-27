@@ -224,7 +224,7 @@ namespace oxs::mysql
 struct xa_switch_t mysql_odbc_xa_switch_t = 
 {
     .name = "mysql_odbc_xa_switch_t",
-    .flags = TMNOFLAGS,
+    .flags = TMNOMIGRATE,
     .version = oxs::xa::version,
     .xa_open_entry = oxs::mysql::open,
     .xa_close_entry = oxs::mysql::close,

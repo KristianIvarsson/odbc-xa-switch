@@ -15,6 +15,11 @@ typedef struct
 } XID;
 
 #define TMNOFLAGS      0x00000000L
+#define TMREGISTER     0x00000001L
+#define TMNOMIGRATE    0x00000002L
+#define TMASYNC        0x00000004L
+
+#define TMNOFLAGS      0x00000000L
 #define TMMIGRATE      0x00100000L
 #define TMJOIN         0x00200000L
 #define TMENDRSCAN     0x00800000L
