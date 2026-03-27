@@ -22,6 +22,8 @@ Minimal open-source ODBC XA switch foundation primarily for XATMI.
   - Requirements
     - MariaDB ODBC driver installed on target host (for example `MariaDB Unicode`, package `odbc-mariadb`)
   - Deviations
+    - Does not support TMMIGRATE/TMJOIN or TMRESUME/TMSUSPEND (due to lack of support in library)
+    - Ignores TMONEPHASE (everything is 2PC)
     - Does not know about XA_RDONLY
 
 - PostgreSQL
@@ -30,7 +32,7 @@ Minimal open-source ODBC XA switch foundation primarily for XATMI.
   - Requirements
     - PostgreSQL ODBC Driver (`psqlODBC, package odbc-postgresql`) installed on target host
   - Deviations
-    - Does not support TMMIGRATE/TMJOIN or TMRESUME/TMSUSPEND
+    - Does not support TMMIGRATE/TMJOIN or TMRESUME/TMSUSPEND (due to lack of support in DB and library)
     - Ignores TMONEPHASE (everything is 2PC)
     - Does not know about XA_RDONLY
   - Note

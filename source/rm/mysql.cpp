@@ -56,6 +56,18 @@ namespace oxs::mysql
                   default:                return XAER_RMFAIL;
                }
             }
+
+            namespace xid
+            {
+               auto encode( const XID* const value)
+               {
+                  assert( value != nullptr);
+
+                  auto gtrid = [] ( const auto& xid) { return xa::xid::hex::encode( xa::xid::make::gtrid( xid)); };
+                  auto bqual = [] ( const auto& xid) { return xa::xid::hex::encode( xa::xid::make::bqual( xid)); };
+                  return std::format( "X'{}',X'{}',{}", gtrid( *value), bqual( *value), value->formatID);
+               }
+            } // xid
          } // native
 
          auto execute( const int rmid, std::string_view sql)
@@ -70,14 +82,13 @@ namespace oxs::mysql
 
          auto execute( const int rmid, const std::string_view entry, const XID* const xid)
          {
-            assert( xid != nullptr);
-
-            auto gtrid = [] ( const auto& xid) { return xa::xid::hex::encode( xa::xid::make::gtrid( xid)); };
-            auto bqual = [] ( const auto& xid) { return xa::xid::hex::encode( xa::xid::make::bqual( xid)); };
-
-            return execute( rmid, std::format( "{} X'{}',X'{}',{}", entry, gtrid( *xid), bqual( *xid), xid->formatID));
+            return execute( rmid, std::format( "{} {}", entry, detail::native::xid::encode( xid)));
          }
 
+         // auto execute( const int rmid, const std::string_view entry, const XID* const xid, const std::string_view flags)
+         // {
+         //    return execute( rmid, std::format( "{} {} {}", entry, detail::native::xid::encode( xid), flags));
+         // }
       } // detail
 
       auto open( char* xa_info, const int rmid, const long)
@@ -90,14 +101,22 @@ namespace oxs::mysql
          return xa::close( nullptr, rmid);
       }
 
-      auto start( XID* const xid, const int rmid, const long)
+      auto start( XID* const xid, const int rmid, const long flags)
       {
+         if( flags & ( TMRESUME | TMJOIN))
+            // not supported
+            [[unlikely]] return XAER_INVAL;
+
          return detail::execute( rmid, "XA START", xid);
       }
 
-      auto end( XID* const xid, const int rmid, const long)
+      auto end( XID* const xid, const int rmid, const long flags)
       {
-         //return detail::execute( rmid, "XA END", xid);
+         if( flags & ( TMSUSPEND | TMMIGRATE))
+            // not supported
+            [[unlikely]] return XAER_INVAL;
+
+         // only prepared transactions can be used through different connections
          return detail::execute( rmid, "XA END", xid) | detail::execute( rmid, "XA PREPARE", xid);
       }
 
@@ -181,7 +200,7 @@ namespace oxs::mysql
 
       auto prepare( XID* const, const int , const long )
       {
-         // return detail::execute( rmid, "XA PREPARE", xid)
+         // there's always a prepared transaction
          return XA_OK;
       }
 
@@ -205,7 +224,7 @@ namespace oxs::mysql
 struct xa_switch_t mysql_odbc_xa_switch_t = 
 {
     .name = "mysql_odbc_xa_switch_t",
-    .flags = TMNOFLAGS,
+    .flags = TMNOMIGRATE,
     .version = oxs::xa::version,
     .xa_open_entry = oxs::mysql::open,
     .xa_close_entry = oxs::mysql::close,
