@@ -52,22 +52,37 @@ namespace oxs::odbc
             logging( *this);
    }
 
-   namespace context
+   namespace create
    {
-      auto create( std::string_view string) -> std::optional< std::tuple< henv, hdbc>>
+      namespace local
       {
-         henv env{ SQL_NULL_HANDLE};
+         namespace
+         {
+            auto environment() -> std::optional< henv>
+            {
+               henv result{ SQL_NULL_HANDLE};
 
-         if( failure( SQLSetEnvAttr( env, SQL_ATTR_ODBC_VERSION, reinterpret_cast< SQLPOINTER>( SQL_OV_ODBC3), 0))) 
-            [[unlikely]] return logging( env), std::nullopt;
+               if( failure( SQLSetEnvAttr( result, SQL_ATTR_ODBC_VERSION, reinterpret_cast< SQLPOINTER>( SQL_OV_ODBC3), 0))) 
+                  [[unlikely]] return logging( result), std::nullopt;
 
-         hdbc dbc{ env};
+               return result;
+            }
+         } //
+      } // local
 
-         if( failure( SQLDriverConnect( dbc, NULL, reinterpret_cast< SQLCHAR*>( const_cast< char*>( string.data())), SQL_NTS, NULL, 0, NULL, SQL_DRIVER_NOPROMPT))) 
-            [[unlikely]] return logging( dbc), std::nullopt;
+      auto connection( std::string_view string) -> std::optional< hdbc>
+      {
+         static const auto environment = local::environment();
 
-         return std::make_tuple( std::move( env), std::move( dbc));
+         if( ! environment)
+            [[unlikely]] return std::nullopt;
+
+         hdbc result{ *environment};
+         if( failure( SQLDriverConnect( result, NULL, reinterpret_cast< SQLCHAR*>( const_cast< char*>( string.data())), SQL_NTS, NULL, 0, NULL, SQL_DRIVER_NOPROMPT))) 
+            [[unlikely]] return logging( result), std::nullopt;
+            
+         return result;
       }
-   } // context
+   } // create
 
 } // oxs::odbc

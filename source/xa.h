@@ -17,7 +17,7 @@ typedef struct
 #define TMNOFLAGS      0x00000000L
 #define TMREGISTER     0x00000001L
 #define TMNOMIGRATE    0x00000002L
-#define TMASYNC        0x00000004L
+#define TMUSEASYNC     0x00000004L
 
 #define TMMIGRATE      0x00100000L
 #define TMJOIN         0x00200000L
@@ -28,6 +28,7 @@ typedef struct
 #define TMRESUME       0x08000000L
 #define TMFAIL         0x20000000L
 #define TMONEPHASE     0x40000000L
+#define TMASYNC        0x80000000L
 
 #define XA_OK          0
 #define XA_RDONLY      3

@@ -13,22 +13,13 @@ extern "C" {
 #endif
 
 /**
- * Gets ODBC XA context handles for a resource manager id.
- *
- * @param rmid Resource manager identifier
- * @note If zero the first potential context is returned
- * @return SQLHENV or SQL_NULL_HENV
- */
-SQLHENV oxs_get_henv( int rmid);
-
-/**
  * Gets ODBC XA context connection handle for a resource manager id.
  *
  * @param rmid Resource manager identifier
- * @note If zero the first potential context is returned
+ * @note If zero the first potential connection is returned
  * @return SQLHDBC or SQL_NULL_HDBC
  */
-SQLHDBC oxs_get_hdbc( int rmid);
+SQLHDBC oxs_get_dbc( int rmid);
 
 #ifdef __cplusplus
 }

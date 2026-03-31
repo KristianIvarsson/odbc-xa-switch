@@ -14,25 +14,24 @@ namespace oxs::context
    {
       namespace
       {
-         std::map< int, data> context;
+         std::map< int, odbc::hdbc> context;
 
-         template< typename type>
          auto get( const int rmid) -> SQLHANDLE
          {
             if( const auto result = rmid ? context.find( rmid) : context.begin(); result != context.end())
-               return std::get< type>( result->second);
+               return result->second;
 
             return SQL_NULL_HANDLE;
          }
       } //
    } // local
 
-   bool add( const int rmid, data&& data)
+   bool add( const int rmid, odbc::hdbc&& data)
    {
       return local::context.emplace( rmid, std::move( data)).second;
    }
 
-   auto pop( const int rmid) -> data
+   auto pop( const int rmid) -> odbc::hdbc
    {
       auto nrv = std::move( local::context.at( rmid));
       local::context.erase( rmid);
@@ -44,26 +43,16 @@ namespace oxs::context
       return local::context.contains( rmid);
    }
 
-   auto env( const int rmid) -> const odbc::henv&
-   {
-      return std::get< odbc::henv>( local::context.at( rmid));
-   }
-
    auto dbc( const int rmid) -> const odbc::hdbc&
    {
-      return std::get< odbc::hdbc>( local::context.at( rmid));
+      return local::context.at( rmid);
    }  
 
 } // oxs::context
 
 #include "odbc-xa-switch/context.h"
 
-SQLHENV oxs_get_henv( int rmid)
+SQLHDBC oxs_get_dbc( const int rmid)
 {
-   return oxs::context::local::get< oxs::odbc::henv>( rmid);
-}
-
-SQLHDBC oxs_get_hdbc( int rmid)
-{
-   return oxs::context::local::get< oxs::odbc::hdbc>( rmid);
+   return oxs::context::local::get( rmid);
 }

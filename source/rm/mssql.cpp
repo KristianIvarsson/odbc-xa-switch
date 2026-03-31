@@ -100,9 +100,12 @@ namespace oxs::mssql
                .flags = static_cast< decltype( param.flags)>( flags),
             };
 
-            if( odbc::failure( SQLSetConnectAttr( context::dbc( rmid), SQL_ATTR_ENLIST_IN_XA, &param, SQL_IS_POINTER)))
+            switch( odbc::failure( SQLSetConnectAttr( context::dbc( rmid), SQL_ATTR_ENLIST_IN_XA, &param, SQL_IS_POINTER)))
+            case SQL_ERROR:
+            case SQL_INVALID_HANDLE:
+            case SQL_STILL_EXECUTING:
                return odbc::logging( context::dbc( rmid)), XAER_RMERR;
-
+            
             return param.status;
          }
       } // detail

@@ -8,19 +8,14 @@
 
 #include "odbc.hpp"
 
-#include <tuple>
-
 namespace oxs
 {
    namespace context
    {
-      using data = std::tuple< odbc::henv, odbc::hdbc>;
-
-      bool add( int rmid, data&& data);
-      auto pop( int rmid) -> data;
+      bool add( int rmid, odbc::hdbc&& data);
+      auto pop( int rmid) -> odbc::hdbc;
       bool has( int rmid);
 
-      auto env( int rmid) -> const odbc::henv&;
       auto dbc( int rmid) -> const odbc::hdbc&;
    } // context
 } // oxs

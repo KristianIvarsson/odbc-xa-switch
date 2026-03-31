@@ -8,7 +8,6 @@
 
 #include <sql.h>
 
-#include <tuple>
 #include <utility>
 #include <optional>
 #include <string_view>
@@ -82,15 +81,14 @@ namespace oxs::odbc
 
    using hstmt = scoped::hstmt;
 
-   namespace context
+   namespace create
    {
-      auto create( std::string_view string) -> std::optional< std::tuple< henv, hdbc>>;
-   } // context
+      auto connection( std::string_view string) -> std::optional< hdbc>;
+   } // create
 
-
-   inline bool failure( const SQLRETURN result)
+   inline auto failure( const SQLRETURN result)
    {
-      return ! SQL_SUCCEEDED( result);
+      return result != SQL_SUCCESS_WITH_INFO ? result : SQL_SUCCESS;
    }
 
    namespace detail

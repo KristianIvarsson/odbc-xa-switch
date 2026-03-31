@@ -61,12 +61,12 @@ namespace oxs::pgsql
          if( context::has( rmid))
             close( nullptr, rmid, TMNOFLAGS);
 
-         auto context = odbc::context::create( xa_info);
+         auto hdbc = odbc::create::connection( xa_info);
 
-         if( ! context)
+         if( ! hdbc)
             [[unlikely]] return XAER_RMFAIL;
             
-         if( ! context::add( rmid, std::move( *context)))
+         if( ! context::add( rmid, std::move( *hdbc)))
             [[unlikely]] return XAER_INVAL;
 
          return XA_OK;

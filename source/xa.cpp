@@ -122,17 +122,17 @@ namespace oxs::xa
       if( oxs::context::has( rmid))
          close( nullptr, rmid);
 
-      auto context = odbc::context::create( xa_info);
+      auto connection = odbc::create::connection( xa_info);
 
-      if( ! context)
+      if( ! connection)
          [[unlikely]] return XAER_RMFAIL;
 
-      const auto& hdbc = std::get< odbc::hdbc>( *context);
+      auto& hdbc = *connection;
 
       if( odbc::failure( SQLSetConnectAttr( hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)SQL_AUTOCOMMIT_OFF, 0))) 
          [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
 
-      if( ! context::add( rmid, std::move( *context)))
+      if( ! context::add( rmid, std::move( hdbc)))
          [[unlikely]] return XAER_INVAL;
 
       return XA_OK;
@@ -142,7 +142,7 @@ namespace oxs::xa
    {
       if( oxs::context::has( rmid))
       {
-         auto [ henv, hdbc] = context::pop( rmid);
+         auto hdbc = context::pop( rmid);
 
          if( odbc::failure( SQLSetConnectAttr( hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)SQL_AUTOCOMMIT_ON, 0))) 
             [[unlikely]] return odbc::logging( hdbc), XAER_RMERR;
