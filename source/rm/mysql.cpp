@@ -22,6 +22,9 @@
 #include <string_view>
 #include <unordered_map>
 
+#include <print>
+#include <unistd.h>
+
 namespace oxs::mysql
 {
    namespace
@@ -72,6 +75,8 @@ namespace oxs::mysql
 
          auto execute( const int rmid, std::string_view sql)
          {
+            std::println( "[{}] {}", getpid(), sql);
+
             odbc::hstmt hstmt{ context::dbc( rmid)};
 
             if( odbc::failure( SQLExecDirect( hstmt, reinterpret_cast< SQLCHAR*>( const_cast< char*>( sql.data())), SQL_NTS)))
@@ -85,10 +90,10 @@ namespace oxs::mysql
             return execute( rmid, std::format( "{} {}", entry, detail::native::xid::encode( xid)));
          }
 
-         // auto execute( const int rmid, const std::string_view entry, const XID* const xid, const std::string_view flags)
-         // {
-         //    return execute( rmid, std::format( "{} {} {}", entry, detail::native::xid::encode( xid), flags));
-         // }
+         auto execute( const int rmid, const std::string_view entry, const XID* const xid, const std::string_view flags)
+         {
+            return execute( rmid, std::format( "{} {} {}", entry, detail::native::xid::encode( xid), flags));
+         }
       } // detail
 
       auto open( char* xa_info, const int rmid, const long)
@@ -103,18 +108,24 @@ namespace oxs::mysql
 
       auto start( XID* const xid, const int rmid, const long flags)
       {
-         if( flags & ( TMRESUME | TMJOIN))
-            // not supported
-            [[unlikely]] return XAER_INVAL;
+         if( flags & TMRESUME)
+            return detail::execute( rmid, "XA START", xid, "RESUME");
+
+         if( flags & TMJOIN)
+            return detail::execute( rmid, "XA START", xid, "JOIN");
 
          return detail::execute( rmid, "XA START", xid);
       }
 
       auto end( XID* const xid, const int rmid, const long flags)
       {
-         if( flags & ( TMSUSPEND | TMMIGRATE))
-            // not supported
-            [[unlikely]] return XAER_INVAL;
+         if( flags & TMSUSPEND)
+         {
+            if( flags & TMMIGRATE)
+               return detail::execute( rmid, "XA END", xid, "SUSPEND FOR MIGRATE");
+            else
+               return detail::execute( rmid, "XA END", xid, "SUSPEND");
+         }
 
          // only prepared transactions can be used through different connections
          return detail::execute( rmid, "XA END", xid) | detail::execute( rmid, "XA PREPARE", xid);
@@ -193,7 +204,7 @@ namespace oxs::mysql
          return static_cast< int>( range.size());
       }
 
-      auto rollback( XID* const xid, const int rmid, const long )
+      auto rollback( XID* const xid, const int rmid, const long)
       {
          return detail::execute( rmid, "XA ROLLBACK", xid);
       }
@@ -204,12 +215,15 @@ namespace oxs::mysql
          return XA_OK;
       }
 
-      auto commit( XID* const xid, const int rmid, const long )
+      auto commit( XID* const xid, const int rmid, const long flags)
       {
+         if( flags & TMONEPHASE)
+            return detail::execute( rmid, "XA COMMIT", xid, "ONE PHASE");
+
          return detail::execute( rmid, "XA COMMIT", xid);
       }
 
-      auto forget( XID* const, const int , const long )
+      auto forget( XID* const, const int , const long)
       {
          return XA_OK;
       }
