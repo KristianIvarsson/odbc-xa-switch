@@ -18,9 +18,12 @@ namespace oxs::context
 
          auto get( const int rmid) -> SQLHANDLE
          {
-            if( const auto result = rmid ? context.find( rmid) : context.begin(); result != context.end())
+            if( const auto result = context.find( rmid); result != context.end())
                return result->second;
 
+            if( rmid == 0 && ! context.empty())
+               return context.begin()->second;
+            
             return SQL_NULL_HANDLE;
          }
       } //
