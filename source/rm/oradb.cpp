@@ -201,14 +201,14 @@ namespace oxs::oradb
 
       } // detail
 
-      auto open( char* xa_info, const int rmid, const long)
+      auto open( char* info, const int rmid, const long)
       {
-         return xa::open( xa_info, rmid);
+         return xa::open( info, rmid);
       }
 
-      auto close( char*, const int rmid, const long)
+      auto close( char* info, const int rmid, const long)
       {
-         return xa::close( nullptr, rmid);
+         return xa::close( info, rmid);
       }
 
       auto start( XID* const xid, const int rmid, const long flags)

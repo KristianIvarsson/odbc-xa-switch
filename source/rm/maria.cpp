@@ -4,7 +4,7 @@
 // Licensed under the MIT License. See https://opensource.org/licenses/MIT for details.
 //
 
-#include "odbc-xa-switch/rm/mysql.h"
+#include "odbc-xa-switch/rm/maria.h"
 
 #include "xa.hpp"
 #include "odbc.hpp"
@@ -22,7 +22,7 @@
 #include <string_view>
 #include <unordered_map>
 
-namespace oxs::mysql
+namespace oxs::maria
 {
    namespace
    {
@@ -85,36 +85,38 @@ namespace oxs::mysql
             return execute( rmid, std::format( "{} {}", entry, detail::native::xid::encode( xid)));
          }
 
-         // auto execute( const int rmid, const std::string_view entry, const XID* const xid, const std::string_view flags)
-         // {
-         //    return execute( rmid, std::format( "{} {} {}", entry, detail::native::xid::encode( xid), flags));
-         // }
       } // detail
 
-      auto open( char* xa_info, const int rmid, const long)
+      auto open( char* info, const int rmid, const long)
       {
-         return xa::open( xa_info, rmid);
+         return xa::open( info, rmid);
       }
 
-      auto close( char*, const int rmid, const long)
+      auto close( char* info, const int rmid, const long)
       {
-         return xa::close( nullptr, rmid);
+         return xa::close( info, rmid);
       }
 
       auto start( XID* const xid, const int rmid, const long flags)
       {
-         if( flags & ( TMRESUME | TMJOIN))
+         if( flags & ( TMJOIN))
             // not supported
-            [[unlikely]] return XAER_INVAL;
+            [[unlikely]] return XAER_INVAL; 
+
+         if( flags & ( TMRESUME))
+            return XA_OK; 
 
          return detail::execute( rmid, "XA START", xid);
       }
 
       auto end( XID* const xid, const int rmid, const long flags)
       {
-         if( flags & ( TMSUSPEND | TMMIGRATE))
+         if( flags & ( TMMIGRATE))
             // not supported
             [[unlikely]] return XAER_INVAL;
+            
+         if( flags & ( TMSUSPEND))
+            return XA_OK;
 
          // only prepared transactions can be used through different connections
          return detail::execute( rmid, "XA END", xid) | detail::execute( rmid, "XA PREPARE", xid);
@@ -219,21 +221,21 @@ namespace oxs::mysql
          return XAER_PROTO;
       }
    } //
-} // oxs::mysql
+} // oxs::maria
 
-struct xa_switch_t mysql_odbc_xa_switch_t = 
+struct xa_switch_t maria_odbc_xa_switch_t = 
 {
-    .name = "mysql_odbc_xa_switch_t",
+    .name = "maria_odbc_xa_switch_t",
     .flags = TMNOMIGRATE,
     .version = oxs::xa::version,
-    .xa_open_entry = oxs::mysql::open,
-    .xa_close_entry = oxs::mysql::close,
-    .xa_start_entry = oxs::mysql::start,
-    .xa_end_entry = oxs::mysql::end,
-    .xa_rollback_entry = oxs::mysql::rollback,
-    .xa_prepare_entry = oxs::mysql::prepare,
-    .xa_commit_entry = oxs::mysql::commit,
-    .xa_recover_entry = oxs::mysql::recover,
-    .xa_forget_entry = oxs::mysql::forget,
-    .xa_complete_entry = oxs::mysql::complete,
+    .xa_open_entry = oxs::maria::open,
+    .xa_close_entry = oxs::maria::close,
+    .xa_start_entry = oxs::maria::start,
+    .xa_end_entry = oxs::maria::end,
+    .xa_rollback_entry = oxs::maria::rollback,
+    .xa_prepare_entry = oxs::maria::prepare,
+    .xa_commit_entry = oxs::maria::commit,
+    .xa_recover_entry = oxs::maria::recover,
+    .xa_forget_entry = oxs::maria::forget,
+    .xa_complete_entry = oxs::maria::complete,
 };

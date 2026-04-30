@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-extern struct xa_switch_t mysql_odbc_xa_switch_t;
+extern struct xa_switch_t debug_xa_switch;
 
 #ifdef __cplusplus
 }

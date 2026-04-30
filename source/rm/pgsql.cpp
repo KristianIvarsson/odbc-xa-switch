@@ -54,14 +54,14 @@ namespace oxs::pgsql
          return XA_OK;
       }
 
-      auto open( char* xa_info, const int rmid, const long)
+      auto open( char* info, const int rmid, const long)
       {
-         assert( xa_info != nullptr);
+         assert( info != nullptr);
 
          if( context::has( rmid))
-            close( nullptr, rmid, TMNOFLAGS);
+            close( info, rmid, TMNOFLAGS);
 
-         auto hdbc = odbc::create::connection( xa_info);
+         auto hdbc = odbc::create::connection( info);
 
          if( ! hdbc)
             [[unlikely]] return XAER_RMFAIL;
@@ -74,18 +74,24 @@ namespace oxs::pgsql
 
       auto start( XID* const xid, const int rmid, const long flags)
       {
-         if( flags & ( TMRESUME | TMJOIN))
+         if( flags & ( TMJOIN))
             // not supported
             [[unlikely]] return XAER_INVAL; 
+
+         if( flags & ( TMRESUME))
+            return XA_OK; 
 
          return detail::execute( rmid, "BEGIN");
       }
 
       auto end( XID* const xid, const int rmid, const long flags)
       {
-         if( flags & ( TMSUSPEND | TMMIGRATE))
+         if( flags & ( TMMIGRATE))
             // not supported
             [[unlikely]] return XAER_INVAL;
+            
+         if( flags & ( TMSUSPEND))
+            return XA_OK;
             
          // only prepared transactions can be used through different connections
          return detail::execute( rmid, "PREPARE TRANSACTION", xid);
